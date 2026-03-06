@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,4 +14,8 @@ pub enum BuildError {
     MetadataFormatError(#[from] serde_yaml::Error),
     #[error("Error building file {0}: {1}")]
     ErrorBuildingFile(String, Box<BuildError>),
+    #[error(transparent)]
+    TemplateError(#[from] tera::Error),
+    #[error(transparent)]
+    CopyError(#[from] fs_extra::error::Error),
 }

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meta.title }}{% endblock title %}
+
+{% block content %}
+<article>
+    <h1>{{ meta.title }}</h1>
+    <div class="metadata">Publish date：{{ meta.date }}</div>
+
+    <div class="post-body">
+        {{ content | safe }}
+    </div>
+</article>
+{% endblock content %}

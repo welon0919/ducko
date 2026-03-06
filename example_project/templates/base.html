@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}預設標題{% endblock %} - 我的網站</title>
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+<nav>
+    <a href="/">Home</a> | <a href="/about">About me</a>
+</nav>
+
+<main>
+    {% block content %}{% endblock content %}
+</main>
+
+<footer>
+    <p>© 2026 Powered by Rust SSG</p>
+</footer>
+</body>
+</html>

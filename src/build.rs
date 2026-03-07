@@ -2,7 +2,6 @@ mod context;
 mod error;
 
 use std::{
-    alloc::alloc,
     fs,
     path::{Path, PathBuf},
     sync::{LazyLock, atomic::Ordering},
@@ -10,11 +9,12 @@ use std::{
 
 use fs_extra::dir::{CopyOptions, copy};
 use log::{info, trace};
-use pulldown_cmark::{CowStr, Event, Event::Text, Options, Parser, Tag, html};
+use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html};
 use tera::Tera;
 
 use crate::{
     build::{context::PostContext, error::BuildError},
+    config::{CONFIG_PATH, SiteConfig},
     metadata::PostMetadata as Metadata,
     serve::WATCH_ENABLED,
 };
@@ -50,14 +50,15 @@ pub fn build() -> Result<(), BuildError> {
     let all_posts = collect_posts(&path)?;
     info!("Found {} posts", all_posts.len());
     let tera = load_templates()?;
+    let site_config = SiteConfig::load_config().unwrap();
     // build the content folder
-    build_folder(&path, &all_posts, &tera)?;
+    build_folder(&path, &all_posts, &tera, &site_config)?;
     // build the  static folder
     build_static_folder()?;
     Ok(())
 }
 fn load_templates() -> Result<Tera, BuildError> {
-    let mut tera = Tera::new("templates/**/*.html")?;
+    let tera = Tera::new("templates/**/*.html")?;
     Ok(tera)
 }
 fn build_static_folder() -> Result<(), BuildError> {
@@ -77,6 +78,7 @@ fn build_folder(
     path: &Path,
     all_posts: &[PostContext],
     tera: &Tera,
+    site_config: &SiteConfig,
 ) -> Result<(), BuildError> {
     let items = fs::read_dir(path).map_err(|e| {
         if let std::io::ErrorKind::NotFound = e.kind() {
@@ -94,9 +96,12 @@ fn build_folder(
             {
                 match extension {
                     "md" => {
-                        if let Err(e) =
-                            build_markdown_file(&path, all_posts, tera)
-                        {
+                        if let Err(e) = build_markdown_file(
+                            &path,
+                            all_posts,
+                            tera,
+                            site_config,
+                        ) {
                             return Err(BuildError::ErrorBuildingFile(
                                 path.display().to_string(),
                                 Box::new(e),
@@ -114,11 +119,11 @@ fn build_folder(
             if path.join("index.md").exists() {
                 // the page is a page bundle
                 trace!("Building page bundle {}", path.display());
-                build_page_bundle(&path, all_posts, tera)?;
+                build_page_bundle(&path, all_posts, tera, site_config)?;
             } else {
                 trace!("Building folder {}", path.display());
-                build_page_bundle(&path, all_posts, tera)?;
-                build_folder(&path, all_posts, tera)?;
+                build_page_bundle(&path, all_posts, tera, site_config)?;
+                build_folder(&path, all_posts, tera, site_config)?;
             }
         }
     }
@@ -138,10 +143,11 @@ fn build_markdown_file(
     path: &Path,
     all_posts: &[PostContext],
     tera: &Tera,
+    config: &SiteConfig,
 ) -> Result<(), BuildError> {
     trace!("Building markdown file {}", path.display());
     let (metadata, body_html) = parse_file(path)?;
-    let html = apply_template(tera, body_html, metadata, all_posts)?;
+    let html = apply_template(tera, body_html, metadata, all_posts, config)?;
     trace!("Calling apply template");
     let is_root_index = path.file_name().map_or(false, |n| n == "index.md")
         && path.parent().map_or(false, |p| p.ends_with(MARKDOWN_PATH));
@@ -160,13 +166,14 @@ fn apply_template(
     body_html: String,
     metadata: Metadata,
     all_posts: &[PostContext],
+    site_config: &SiteConfig,
 ) -> Result<String, BuildError> {
     let mut context = tera::Context::new();
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
     context.insert("posts", &all_posts);
+    context.insert("config", &site_config);
     let template = metadata.template.as_deref().unwrap_or("post.html");
-    // TODO Insert global config here
     let mut html = tera
         .render(template, &context)
         .map_err(|e| BuildError::from(e))?;
@@ -252,6 +259,7 @@ fn build_page_bundle(
     bundle_src_path: &Path,
     all_posts: &[PostContext],
     tera: &Tera,
+    site_config: &SiteConfig,
 ) -> Result<(), BuildError> {
     let dest_dir = get_output_file_folder(bundle_src_path);
     fs::create_dir_all(&dest_dir)?;
@@ -267,7 +275,7 @@ fn build_page_bundle(
             match extension {
                 Some("md") => {
                     trace!("Processing bundle content: {}", path.display());
-                    build_markdown_file(&path, all_posts, tera)?;
+                    build_markdown_file(&path, all_posts, tera, site_config)?;
                 }
                 Some(ext)
                     if matches!(
@@ -295,13 +303,17 @@ fn build_page_bundle(
 pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
     let all_posts = collect_posts(MARKDOWN_PATH)?;
     let tera = load_templates()?;
+    let site_config = SiteConfig::load_config().unwrap();
     let current_dir = std::env::current_dir()?;
     let rel_path = absolute_path
         .strip_prefix(&current_dir)
         .unwrap_or(absolute_path);
     let path_str = rel_path.to_string_lossy();
     trace!("Handling file: {}", path_str);
-    if path_str.contains("templates/") {
+    if path_str.contains(CONFIG_PATH) {
+        info!("Config file changed, performing full rebuild");
+        build()?;
+    } else if path_str.contains("templates/") {
         info!("Template changed, performing full rebuild");
         build()?;
     } else if path_str.starts_with(MARKDOWN_PATH) {
@@ -310,10 +322,20 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
                 if let Some(parent) = rel_path.parent() {
                     if parent != Path::new(MARKDOWN_PATH) {
                         info!("Page bundle changed: {:?}", parent);
-                        build_page_bundle(parent, &all_posts, &tera)?;
+                        build_page_bundle(
+                            parent,
+                            &all_posts,
+                            &tera,
+                            &site_config,
+                        )?;
                     } else {
                         info!("Single markdown changed: {:?}", rel_path);
-                        build_markdown_file(rel_path, &all_posts, &tera)?;
+                        build_markdown_file(
+                            rel_path,
+                            &all_posts,
+                            &tera,
+                            &site_config,
+                        )?;
                     }
                 }
             } else if matches!(
@@ -328,7 +350,7 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
                     | "tiff"
             ) {
                 if let Some(parent) = rel_path.parent() {
-                    build_page_bundle(parent, &all_posts, &tera)?;
+                    build_page_bundle(parent, &all_posts, &tera, &site_config)?;
                 }
             }
         }

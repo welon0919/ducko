@@ -19,7 +19,9 @@ use tower_http::services::ServeDir;
 use crate::{
     PORT, build,
     build::{MARKDOWN_PATH, OUTPUT_PATH, STATIC_PATH, handle_file_change},
+    config::CONFIG_PATH,
 };
+
 pub static WATCH_ENABLED: AtomicBool = AtomicBool::new(false);
 
 pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
@@ -82,6 +84,9 @@ fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
     if Path::new("templates").exists() {
         watcher.watch(Path::new("templates"), RecursiveMode::Recursive)?;
     }
+    if Path::new(CONFIG_PATH).exists() {
+        watcher.watch(Path::new(CONFIG_PATH), RecursiveMode::Recursive)?;
+    }
     info!("Listening for changes");
     loop {
         match rx.recv() {
@@ -111,10 +116,7 @@ fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
                             continue;
                         }
                         info!("File changed, handling {:?}", path);
-                        let needs_recalculate_all_posts = matches!(
-                            event.kind,
-                            EventKind::Create(_) | EventKind::Remove(_)
-                        );
+
                         if let Err(e) = handle_file_change(&path) {
                             error!("Handle file change error: {e}");
                         } else {

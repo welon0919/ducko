@@ -1,0 +1,20 @@
+title: "我的 Rust 部落格"
+description: "記錄系統程式設計的冒險旅程"
+base_url: "https://myusername.github.io/blog"
+language_code: "zh-Hant"
+
+author:
+  name: "Rust愛好者"
+  email: "me@example.com"
+
+menu:
+  - name: "首頁"
+    url: "/"
+  - name: "關於我"
+    url: "/about/"
+  - name: "GitHub"
+    url: "https://github.com/myusername"
+
+extra:
+  icp_license: "如果你在中國需要備案號"
+  analytics_id: "G-XXXXXXXXXX"

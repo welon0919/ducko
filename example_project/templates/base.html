@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="{{ config.language_code }}">
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
@@ -12,8 +12,9 @@
     <nav class="container">
         <a class="logo" href="/">My<strong>Blog</strong></a>
         <div class="links">
-            <a href="/">Home</a>
-            <a href="/about/">About</a>
+            {% for menu_item in config.menu %}
+            <a href="{{ menu_item.url }}">{{ menu_item.name }}</a>
+            {% endfor %}
         </div>
     </nav>
 </header>

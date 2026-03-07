@@ -1,5 +1,8 @@
+mod context;
 mod error;
+
 use std::{
+    alloc::alloc,
     fs,
     path::{Path, PathBuf},
     sync::{LazyLock, atomic::Ordering},
@@ -11,7 +14,8 @@ use pulldown_cmark::{CowStr, Event, Event::Text, Options, Parser, Tag, html};
 use tera::Tera;
 
 use crate::{
-    build::error::BuildError, metadata::PostMetadata as Metadata,
+    build::{context::PostContext, error::BuildError},
+    metadata::PostMetadata as Metadata,
     serve::WATCH_ENABLED,
 };
 
@@ -37,17 +41,24 @@ static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
     options.insert(Options::ENABLE_TASKLISTS);
     options
 });
-static TEMPLATE: LazyLock<Tera> =
-    LazyLock::new(|| Tera::new("templates/**/*.html").unwrap());
+
 pub fn build() -> Result<(), BuildError> {
     let path = PathBuf::from(MARKDOWN_PATH);
     trace!("Clearing directory {OUTPUT_PATH}");
     fs::remove_dir_all(OUTPUT_PATH)?;
+    trace!("Collecting all posts");
+    let all_posts = collect_posts(&path)?;
+    info!("Found {} posts", all_posts.len());
+    let tera = load_templates()?;
     // build the content folder
-    build_folder(&path)?;
+    build_folder(&path, &all_posts, &tera)?;
     // build the  static folder
     build_static_folder()?;
     Ok(())
+}
+fn load_templates() -> Result<Tera, BuildError> {
+    let mut tera = Tera::new("templates/**/*.html")?;
+    Ok(tera)
 }
 fn build_static_folder() -> Result<(), BuildError> {
     let mut options = CopyOptions::new();
@@ -62,7 +73,11 @@ fn build_static_folder() -> Result<(), BuildError> {
     }
     Ok(())
 }
-fn build_folder(path: &Path) -> Result<(), BuildError> {
+fn build_folder(
+    path: &Path,
+    all_posts: &[PostContext],
+    tera: &Tera,
+) -> Result<(), BuildError> {
     let items = fs::read_dir(path).map_err(|e| {
         if let std::io::ErrorKind::NotFound = e.kind() {
             BuildError::ContentNotFound
@@ -79,7 +94,9 @@ fn build_folder(path: &Path) -> Result<(), BuildError> {
             {
                 match extension {
                     "md" => {
-                        if let Err(e) = build_markdown_file(&path) {
+                        if let Err(e) =
+                            build_markdown_file(&path, all_posts, tera)
+                        {
                             return Err(BuildError::ErrorBuildingFile(
                                 path.display().to_string(),
                                 Box::new(e),
@@ -97,11 +114,11 @@ fn build_folder(path: &Path) -> Result<(), BuildError> {
             if path.join("index.md").exists() {
                 // the page is a page bundle
                 trace!("Building page bundle {}", path.display());
-                build_page_bundle(&path)?;
+                build_page_bundle(&path, all_posts, tera)?;
             } else {
                 trace!("Building folder {}", path.display());
-                build_page_bundle(&path)?;
-                build_folder(&path)?;
+                build_page_bundle(&path, all_posts, tera)?;
+                build_folder(&path, all_posts, tera)?;
             }
         }
     }
@@ -117,10 +134,14 @@ fn build_image(path: &Path) -> Result<(), BuildError> {
     fs::copy(path, &output_path)?;
     Ok(())
 }
-fn build_markdown_file(path: &Path) -> Result<(), BuildError> {
+fn build_markdown_file(
+    path: &Path,
+    all_posts: &[PostContext],
+    tera: &Tera,
+) -> Result<(), BuildError> {
     trace!("Building markdown file {}", path.display());
     let (metadata, body_html) = parse_file(path)?;
-    let html = apply_template(&TEMPLATE, body_html, metadata)?;
+    let html = apply_template(tera, body_html, metadata, all_posts)?;
     trace!("Calling apply template");
     let is_root_index = path.file_name().map_or(false, |n| n == "index.md")
         && path.parent().map_or(false, |p| p.ends_with(MARKDOWN_PATH));
@@ -138,14 +159,16 @@ fn apply_template(
     tera: &Tera,
     body_html: String,
     metadata: Metadata,
+    all_posts: &[PostContext],
 ) -> Result<String, BuildError> {
     let mut context = tera::Context::new();
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
-    let template = metadata.template().unwrap_or("post.html");
+    context.insert("posts", &all_posts);
+    let template = metadata.template.as_deref().unwrap_or("post.html");
     // TODO Insert global config here
     let mut html = tera
-        .render("post.html", &context)
+        .render(template, &context)
         .map_err(|e| BuildError::from(e))?;
     if WATCH_ENABLED.load(Ordering::Relaxed) {
         html.push_str(LIVE_RELOAD_SCRIPT);
@@ -225,7 +248,11 @@ fn get_output_file_folder(path: &Path) -> PathBuf {
     }
     output
 }
-fn build_page_bundle(bundle_src_path: &Path) -> Result<(), BuildError> {
+fn build_page_bundle(
+    bundle_src_path: &Path,
+    all_posts: &[PostContext],
+    tera: &Tera,
+) -> Result<(), BuildError> {
     let dest_dir = get_output_file_folder(bundle_src_path);
     fs::create_dir_all(&dest_dir)?;
 
@@ -240,7 +267,7 @@ fn build_page_bundle(bundle_src_path: &Path) -> Result<(), BuildError> {
             match extension {
                 Some("md") => {
                     trace!("Processing bundle content: {}", path.display());
-                    build_markdown_file(&path)?;
+                    build_markdown_file(&path, all_posts, tera)?;
                 }
                 Some(ext)
                     if matches!(
@@ -266,6 +293,8 @@ fn build_page_bundle(bundle_src_path: &Path) -> Result<(), BuildError> {
     Ok(())
 }
 pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
+    let all_posts = collect_posts(MARKDOWN_PATH)?;
+    let tera = load_templates()?;
     let current_dir = std::env::current_dir()?;
     let rel_path = absolute_path
         .strip_prefix(&current_dir)
@@ -281,10 +310,10 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
                 if let Some(parent) = rel_path.parent() {
                     if parent != Path::new(MARKDOWN_PATH) {
                         info!("Page bundle changed: {:?}", parent);
-                        build_page_bundle(parent)?;
+                        build_page_bundle(parent, &all_posts, &tera)?;
                     } else {
                         info!("Single markdown changed: {:?}", rel_path);
-                        build_markdown_file(rel_path)?;
+                        build_markdown_file(rel_path, &all_posts, &tera)?;
                     }
                 }
             } else if matches!(
@@ -299,7 +328,7 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
                     | "tiff"
             ) {
                 if let Some(parent) = rel_path.parent() {
-                    build_page_bundle(parent)?;
+                    build_page_bundle(parent, &all_posts, &tera)?;
                 }
             }
         }
@@ -317,4 +346,37 @@ fn update_single_static_asset(rel_path: &Path) -> Result<(), BuildError> {
     }
     fs::copy(rel_path, dest_path)?;
     Ok(())
+}
+fn collect_posts(
+    path: impl AsRef<Path>,
+) -> Result<Vec<PostContext>, BuildError> {
+    let mut posts = Vec::new();
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            posts.extend(collect_posts(&path)?);
+        } else if let Some(ext) = path.extension() {
+            if ext == "md" {
+                let (meta, content) = parse_file(&path)?;
+
+                let rel_path = path.strip_prefix(MARKDOWN_PATH).unwrap();
+                let stem = rel_path.file_stem().unwrap().to_string_lossy();
+                let parent = rel_path.parent().unwrap().to_string_lossy();
+
+                let url = if stem == "index" && parent == "" {
+                    "/".to_string()
+                } else if stem == "index" {
+                    format!("/{}/", parent)
+                } else {
+                    format!("/{}/{}/", parent, stem)
+                };
+
+                posts.push(PostContext { meta, url });
+            }
+        }
+    }
+    posts.sort_by(|a, b| b.meta.date.cmp(&a.meta.date));
+    Ok(posts)
 }

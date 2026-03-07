@@ -1,21 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
-    <meta charset="utf-8">
-    <title>{% block title %}預設標題{% endblock %} - 我的網站</title>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>{% block title %}My blog{% endblock %}</title>
     <link href="/static/style.css" rel="stylesheet">
+    <meta content="Rust Static Site Generator" name="description">
 </head>
 <body>
-<nav>
-    <a href="/">Home</a> | <a href="/about">About me</a>
-</nav>
+<header>
+    <nav class="container">
+        <a class="logo" href="/">My<strong>Blog</strong></a>
+        <div class="links">
+            <a href="/">Home</a>
+            <a href="/about/">About</a>
+        </div>
+    </nav>
+</header>
 
-<main>
-    {% block content %}{% endblock content %}
+<main class="container">
+    {% block content %}{% endblock %}
 </main>
 
-<footer>
-    <p>© 2026 Powered by Rust SSG</p>
+<footer class="container">
+    <p>&copy; 2026 Powered by Rust SSG</p>
 </footer>
 </body>
 </html>

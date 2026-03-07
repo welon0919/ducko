@@ -1,14 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}{{ meta.title }}{% endblock title %}
+{% block title %}{{ meta.title }} - 我的部落格{% endblock %}
 
 {% block content %}
-<article>
-    <h1>{{ meta.title }}</h1>
-    <div class="metadata">Publish date：{{ meta.date }}</div>
+<article class="post">
+    <header class="post-header">
+        <h1>{{ meta.title }}</h1>
+        <div class="post-meta">
+            Published at
+            <time>{{ meta.date }}</time>
+        </div>
+    </header>
 
-    <div class="post-body">
+    <div class="post-content">
         {{ content | safe }}
     </div>
+
+    <div class="post-footer">
+        <a href="/">Back to home</a>
+    </div>
 </article>
-{% endblock content %}
+{% endblock %}

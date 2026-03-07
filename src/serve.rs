@@ -12,11 +12,8 @@ use axum::{
     routing::get,
 };
 use log::{debug, error, info, trace};
-use notify::{
-    Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
-    event::ModifyKind,
-};
-use tokio::sync::{broadcast, broadcast::Sender};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use tokio::sync::broadcast;
 use tower_http::services::ServeDir;
 
 use crate::{
@@ -28,7 +25,7 @@ pub static WATCH_ENABLED: AtomicBool = AtomicBool::new(false);
 pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
     WATCH_ENABLED.store(watch_for_update, std::sync::atomic::Ordering::Relaxed);
     build().context("Initial build failed")?;
-    let (reload_tx, _) = tokio::sync::broadcast::channel::<()>(16);
+    let (reload_tx, _) = broadcast::channel::<()>(16);
     if watch_for_update {
         let sender_tx = reload_tx.clone();
         std::thread::spawn(move || {
@@ -49,7 +46,7 @@ pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
         .fallback_service(serve_dir);
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
     info!("listening on http://{addr}",);
-    webbrowser::open(format!("http://{}", addr).as_str()).unwrap();
+    webbrowser::open(format!("http://{}", addr).as_str())?;
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context("Failed to bind listener")?;
@@ -58,7 +55,7 @@ pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
 }
 async fn livereload_handler(
     ws: WebSocketUpgrade,
-    mut reload_tx: broadcast::Sender<()>,
+    reload_tx: broadcast::Sender<()>,
 ) -> impl axum::response::IntoResponse {
     let mut reload_rx = reload_tx.subscribe();
     ws.on_upgrade(move |mut socket| async move {
@@ -71,7 +68,7 @@ async fn livereload_handler(
     })
 }
 
-fn watch(reload_tx: tokio::sync::broadcast::Sender<()>) -> anyhow::Result<()> {
+fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
     let (tx, rx) = channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     let output_abs = std::fs::canonicalize(OUTPUT_PATH)
@@ -89,7 +86,12 @@ fn watch(reload_tx: tokio::sync::broadcast::Sender<()>) -> anyhow::Result<()> {
     loop {
         match rx.recv() {
             Ok(Ok(event)) => {
-                if matches!(event.kind, EventKind::Modify(_)) {
+                if matches!(
+                    event.kind,
+                    EventKind::Modify(_)
+                        | EventKind::Create(_)
+                        | EventKind::Remove(_)
+                ) {
                     std::thread::sleep(Duration::from_millis(50));
                     // while let Ok(_) = rx.try_recv() {}
                     let mut needs_reload = false;
@@ -109,6 +111,10 @@ fn watch(reload_tx: tokio::sync::broadcast::Sender<()>) -> anyhow::Result<()> {
                             continue;
                         }
                         info!("File changed, handling {:?}", path);
+                        let needs_recalculate_all_posts = matches!(
+                            event.kind,
+                            EventKind::Create(_) | EventKind::Remove(_)
+                        );
                         if let Err(e) = handle_file_change(&path) {
                             error!("Handle file change error: {e}");
                         } else {

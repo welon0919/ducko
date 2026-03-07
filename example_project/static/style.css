@@ -1,17 +1,165 @@
+/* --- 全域設定 --- */
+:root {
+    --bg-color: #ffffff;
+    --text-color: #333333;
+    --accent-color: #0070f3; /* 漂亮的藍色 */
+    --gray-color: #666666;
+    --code-bg: #f5f5f5;
+    --container-width: 720px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: var(--bg-color);
+    margin: 0;
+    padding: 0;
+}
+
+/* 讓內容置中並限制寬度 */
+.container {
+    max-width: var(--container-width);
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* --- 導覽列 --- */
+header {
+    border-bottom: 1px solid #eaeaea;
+    padding: 20px 0;
+    margin-bottom: 40px;
+}
+
 nav {
-    padding: 10px;
-    background-color: black;
-    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-nav a {
-    color: white;
+.logo {
+    font-size: 1.2rem;
+    color: #000;
+    font-weight: bold;
+    text-decoration: none;
 }
 
-nav a:visited {
-    color: white;
+.links a {
+    margin-left: 20px;
+    color: var(--gray-color);
+    font-size: 0.95rem;
 }
 
-nav a:hover {
-    color: white;
+.links a:hover {
+    color: #000;
+}
+
+/* --- 首頁文章列表 --- */
+.intro {
+    margin-bottom: 40px;
+}
+
+.post-list ul {
+    list-style: none;
+    padding: 0;
+}
+
+.post-item {
+    display: flex;
+    align-items: baseline;
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.post-date {
+    font-family: monospace;
+    color: var(--gray-color);
+    margin-right: 20px;
+    font-size: 0.9rem;
+    min-width: 100px;
+}
+
+.post-link {
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+.post-link:hover {
+    color: var(--accent-color);
+}
+
+/* --- 文章內頁 --- */
+.post-header {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.post-header h1 {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+    line-height: 1.2;
+}
+
+.post-meta {
+    color: var(--gray-color);
+    font-size: 0.9rem;
+}
+
+.post-content {
+    font-size: 1.05rem;
+}
+
+.post-content h2, .post-content h3 {
+    margin-top: 40px;
+}
+
+.post-content p {
+    margin-bottom: 20px;
+}
+
+.post-content img {
+    max-width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* --- 程式碼區塊 --- */
+pre {
+    background: var(--code-bg);
+    padding: 15px;
+    border-radius: 5px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+}
+
+code {
+    font-family: "Menlo", "Monaco", "Consolas", monospace;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+pre code {
+    background: transparent;
+    padding: 0;
+}
+
+/* --- 頁尾 --- */
+footer {
+    margin-top: 80px;
+    padding: 40px 0;
+    border-top: 1px solid #eaeaea;
+    text-align: center;
+    color: var(--gray-color);
+    font-size: 0.85rem;
 }

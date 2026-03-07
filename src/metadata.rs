@@ -6,11 +6,4 @@ pub(crate) struct PostMetadata {
     date: String,
     #[serde(default)]
     tags: Vec<String>,
-    #[serde(default)]
-    template: Option<String>,
-}
-impl PostMetadata {
-    pub(crate) fn get_template(&self) -> Option<&str> {
-        self.template.as_deref()
-    }
 }

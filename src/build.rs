@@ -26,21 +26,18 @@ static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
 static TEMPLATE: LazyLock<Tera> =
     LazyLock::new(|| Tera::new("templates/**/*.html").unwrap());
 pub fn build() -> Result<(), BuildError> {
-    let content_path = PathBuf::from(MARKDOWN_PATH);
+    let path = PathBuf::from(MARKDOWN_PATH);
     trace!("Clearing directory {OUTPUT_PATH}");
-    if Path::new(&OUTPUT_PATH).exists() {
-        fs::remove_dir_all(&OUTPUT_PATH)?;
-    }
+    fs::remove_dir_all(OUTPUT_PATH)?;
     // build the content folder
-    build_folder(&content_path)?;
-    // build the static folder
+    build_folder(&path)?;
+    // build the  static folder
     build_static_folder()?;
     Ok(())
 }
 fn build_static_folder() -> Result<(), BuildError> {
     let mut options = CopyOptions::new();
-    options.copy_inside = false;
-    options.overwrite = true;
+    options.copy_inside = true;
     let static_path = PathBuf::from(STATIC_PATH);
     if static_path.exists() {
         copy(
@@ -130,9 +127,8 @@ fn apply_template(
     let mut context = tera::Context::new();
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
-    let template_name = metadata.get_template().unwrap_or("post.html");
     // TODO Insert global config here
-    tera.render(template_name, &context).map_err(Into::into)
+    tera.render("post.html", &context).map_err(Into::into)
 }
 fn parse_file(path: &Path) -> Result<(Metadata, String), BuildError> {
     trace!("Parsing file {}", path.display());
@@ -244,22 +240,6 @@ fn build_page_bundle(bundle_src_path: &Path) -> Result<(), BuildError> {
                 _ => trace!("Skipping unknown bundle file: {:?}", file_name),
             }
         }
-    }
-    Ok(())
-}
-
-pub(crate) fn handle_file_change(path: &Path) -> Result<(), BuildError> {
-    let path_str = path.to_string_lossy();
-    if path_str.contains("/templates/") {
-        build()?;
-    } else if path_str.ends_with(".md") {
-        if path.file_name().unwrap().to_str().unwrap() == "index.md" {
-            build_page_bundle(path.parent().unwrap())?;
-        } else {
-            build_markdown_file(path)?;
-        }
-    } else if path_str.contains("/static/") {
-        build_static_folder()?;
     }
     Ok(())
 }

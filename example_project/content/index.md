@@ -4,7 +4,7 @@ date: 2026-03-05
 categories: [ ]
 ---
 
-# Welcome to Our Awesome Static Site
+# Welcome to Our Static Site
 
 This is a test page demonstrating the capabilities of our static site generator built with Rust.
 

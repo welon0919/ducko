@@ -2,7 +2,7 @@ mod error;
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::LazyLock,
+    sync::{LazyLock, atomic::Ordering},
 };
 
 use fs_extra::dir::{CopyOptions, copy};
@@ -10,11 +10,25 @@ use log::{info, trace};
 use pulldown_cmark::{CowStr, Event, Event::Text, Options, Parser, Tag, html};
 use tera::Tera;
 
-use crate::{build::error::BuildError, metadata::PostMetadata as Metadata};
+use crate::{
+    build::error::BuildError, metadata::PostMetadata as Metadata,
+    serve::WATCH_ENABLED,
+};
 
-const MARKDOWN_PATH: &str = "content";
-const STATIC_PATH: &str = "static";
+pub const MARKDOWN_PATH: &str = "content";
+pub const STATIC_PATH: &str = "static";
 pub const OUTPUT_PATH: &str = "public";
+const LIVE_RELOAD_SCRIPT: &str = r#"
+            <script>
+                const socket = new WebSocket('ws://' + window.location.host + '/livereload');
+                socket.onmessage = (event) => {
+                    if (event.data === 'RELOAD') {
+                        window.location.reload();
+                    }
+                };
+                socket.onclose = () => console.log('LiveReload connection closed.');
+            </script>
+        "#;
 static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -108,12 +122,13 @@ fn build_markdown_file(path: &Path) -> Result<(), BuildError> {
     let (metadata, body_html) = parse_file(path)?;
     let html = apply_template(&TEMPLATE, body_html, metadata)?;
     trace!("Calling apply template");
-    let file_output_path =
-        if path == Path::new("../example_project/content/index.md") {
-            PathBuf::from(OUTPUT_PATH).join("index.html")
-        } else {
-            get_output_file_folder(path).join("index.html")
-        };
+    let is_root_index = path.file_name().map_or(false, |n| n == "index.md")
+        && path.parent().map_or(false, |p| p.ends_with(MARKDOWN_PATH));
+    let file_output_path = if is_root_index {
+        PathBuf::from(OUTPUT_PATH).join("index.html")
+    } else {
+        get_output_file_folder(path).join("index.html")
+    };
     trace!("Writing markdown to file {}", file_output_path.display());
     fs::create_dir_all(file_output_path.parent().unwrap())?;
     fs::write(&file_output_path, &html)?;
@@ -127,8 +142,15 @@ fn apply_template(
     let mut context = tera::Context::new();
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
+    let template = metadata.template().unwrap_or("post.html");
     // TODO Insert global config here
-    tera.render("post.html", &context).map_err(Into::into)
+    let mut html = tera
+        .render("post.html", &context)
+        .map_err(|e| BuildError::from(e))?;
+    if WATCH_ENABLED.load(Ordering::Relaxed) {
+        html.push_str(LIVE_RELOAD_SCRIPT);
+    }
+    Ok(html)
 }
 fn parse_file(path: &Path) -> Result<(Metadata, String), BuildError> {
     trace!("Parsing file {}", path.display());
@@ -241,5 +263,58 @@ fn build_page_bundle(bundle_src_path: &Path) -> Result<(), BuildError> {
             }
         }
     }
+    Ok(())
+}
+pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
+    let current_dir = std::env::current_dir()?;
+    let rel_path = absolute_path
+        .strip_prefix(&current_dir)
+        .unwrap_or(absolute_path);
+    let path_str = rel_path.to_string_lossy();
+    trace!("Handling file: {}", path_str);
+    if path_str.contains("templates/") {
+        info!("Template changed, performing full rebuild");
+        build()?;
+    } else if path_str.starts_with(MARKDOWN_PATH) {
+        if let Some(ext) = rel_path.extension().and_then(|s| s.to_str()) {
+            if ext == "md" {
+                if let Some(parent) = rel_path.parent() {
+                    if parent != Path::new(MARKDOWN_PATH) {
+                        info!("Page bundle changed: {:?}", parent);
+                        build_page_bundle(parent)?;
+                    } else {
+                        info!("Single markdown changed: {:?}", rel_path);
+                        build_markdown_file(rel_path)?;
+                    }
+                }
+            } else if matches!(
+                ext,
+                "png"
+                    | "jpg"
+                    | "jpeg"
+                    | "gif"
+                    | "bmp"
+                    | "webp"
+                    | "svg"
+                    | "tiff"
+            ) {
+                if let Some(parent) = rel_path.parent() {
+                    build_page_bundle(parent)?;
+                }
+            }
+        }
+    } else if path_str.starts_with(STATIC_PATH) {
+        info!("Static asset changed, updating {}", rel_path.display());
+        update_single_static_asset(rel_path)?;
+    }
+    Ok(())
+}
+
+fn update_single_static_asset(rel_path: &Path) -> Result<(), BuildError> {
+    let dest_path = PathBuf::from(OUTPUT_PATH).join(rel_path);
+    if let Some(parent) = dest_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(rel_path, dest_path)?;
     Ok(())
 }

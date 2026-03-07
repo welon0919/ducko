@@ -3,3 +3,15 @@ nav {
     background-color: black;
     color: white;
 }
+
+nav a {
+    color: white;
+}
+
+nav a:visited {
+    color: white;
+}
+
+nav a:hover {
+    color: white;
+}

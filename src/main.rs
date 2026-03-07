@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use static_site_generator::{build, serve};
+use static_site_generator::{build, serve, watch_files};
 
 #[derive(Parser)]
 struct Args {
@@ -20,6 +20,11 @@ pub async fn main() -> anyhow::Result<()> {
             build()?;
         }
         Commands::Serve => {
+            std::thread::spawn(|| {
+                if let Err(e) = watch_files() {
+                    eprintln!("Error while watching files: {}", e);
+                }
+            });
             serve().await?;
         }
     }

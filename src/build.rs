@@ -56,6 +56,9 @@ pub fn build() -> Result<(), BuildError> {
     let site_config = SiteConfig::load_config().unwrap();
     // build the content folder
     build_folder(&path, &all_posts, &tera, &site_config)?;
+    let sitemap = generate_sitemap(&all_posts, &site_config);
+    let sitemap_path = Path::new(OUTPUT_PATH).join("sitemap.xml");
+    fs::write(sitemap_path, sitemap)?;
     // build the  static folder
     build_static_folder()?;
     Ok(())
@@ -379,7 +382,6 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
     }
     Ok(())
 }
-
 fn update_single_static_asset(rel_path: &Path) -> Result<(), BuildError> {
     let dest_path = PathBuf::from(OUTPUT_PATH).join(rel_path);
     if let Some(parent) = dest_path.parent() {
@@ -420,4 +422,20 @@ fn collect_posts(
     }
     posts.sort_by(|a, b| b.meta.date.cmp(&a.meta.date));
     Ok(posts)
+}
+#[must_use]
+fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
+    let mut xml = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#,
+    );
+
+    for post in posts {
+        xml.push_str(&format!(
+            "<url><loc>{}{}</loc><lastmod>{}</lastmod></url>",
+            config.base_url, post.url, post.meta.date
+        ));
+    }
+
+    xml.push_str("</urlset>");
+    xml
 }

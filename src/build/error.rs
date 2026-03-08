@@ -18,4 +18,6 @@ pub enum BuildError {
     TemplateError(#[from] tera::Error),
     #[error(transparent)]
     CopyError(#[from] fs_extra::error::Error),
+    #[error("{0}")]
+    GeneralError(String),
 }

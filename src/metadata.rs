@@ -9,4 +9,6 @@ pub(crate) struct PostMetadata {
     pub tags: Vec<String>,
     #[serde(default)]
     pub template: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }

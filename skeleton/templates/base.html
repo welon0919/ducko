@@ -2,7 +2,21 @@
 <html lang="{{ site.language_code }}">
 <head>
     <meta charset="UTF-8">
-    <title>{% block title %}{{ site.title }}{% endblock %}</title>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+
+    <title>{% block title %}{{ meta.title }} | {{ site.title }}{% endblock %}</title>
+    <meta content="{{ meta.description | default(value=site.description) }}" name="description">
+    <link href="{{ site.base_url }}{{ current_url }}" rel="canonical">
+
+    <meta content="article" property="og:type">
+    <meta content="{{ meta.title }}" property="og:title">
+    <meta content="{{ meta.description | default(value=site.description) }}" property="og:description">
+    <meta content="{{ site.base_url }}{{ current_url }}" property="og:url">
+    <meta content="{{ site.title }}" property="og:site_name">
+
+    <meta content="summary_large_image" name="twitter:card">
+    <meta content="{{ meta.title }}" name="twitter:title">
+    <meta content="{{ meta.description | default(value=site.description) }}" name="twitter:description">
     <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>

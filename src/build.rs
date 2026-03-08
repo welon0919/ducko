@@ -2,10 +2,11 @@ mod context;
 mod error;
 
 use std::{
+    borrow::Cow,
     error::Error,
     fmt::Write as _,
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::{LazyLock, atomic::Ordering},
 };
 
@@ -201,10 +202,12 @@ fn apply_template(
     path: &Path,
 ) -> Result<String, BuildError> {
     let mut context = tera::Context::new();
+    let url = path_to_url(path);
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
     context.insert("posts", &all_posts);
     context.insert("site", &site_config);
+    context.insert("current_url", &url);
     let template = if let Some(template) = metadata.template.as_deref() {
         template
     } else if path.file_name().is_some_and(|n| n == "index.md")
@@ -478,4 +481,35 @@ fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
 
     xml.push_str("</urlset>");
     xml
+}
+
+fn path_to_url(path: &Path) -> String {
+    let mut components: Vec<_> = path
+        .components()
+        .filter_map(|c| {
+            if let Component::Normal(s) = c {
+                Some(s.to_string_lossy())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if !components.is_empty() && components[0] == "content" {
+        components.remove(0);
+    }
+
+    if let Some(last) = components.last_mut() {
+        if last == "index.md" {
+            components.pop();
+        } else if last.ends_with(".md") {
+            *last = Cow::from(last.trim_end_matches(".md").to_string());
+        }
+    }
+
+    if components.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}/", components.join("/"))
+    }
 }

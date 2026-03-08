@@ -2,13 +2,14 @@ mod context;
 mod error;
 
 use std::{
+    error::Error,
     fs,
     path::{Path, PathBuf},
     sync::{LazyLock, atomic::Ordering},
 };
 
 use fs_extra::dir::{CopyOptions, copy};
-use log::{info, trace};
+use log::{error, info, trace};
 use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html};
 use tera::Tera;
 
@@ -44,8 +45,10 @@ static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
 
 pub fn build() -> Result<(), BuildError> {
     let path = PathBuf::from(MARKDOWN_PATH);
-    trace!("Clearing directory {OUTPUT_PATH}");
-    fs::remove_dir_all(OUTPUT_PATH)?;
+    if Path::new(OUTPUT_PATH).exists() {
+        info!("Clearing directory {OUTPUT_PATH}");
+        fs::remove_dir_all(OUTPUT_PATH)?;
+    }
     trace!("Collecting all posts");
     let all_posts = collect_posts(&path)?;
     info!("Found {} posts", all_posts.len());
@@ -147,7 +150,8 @@ fn build_markdown_file(
 ) -> Result<(), BuildError> {
     trace!("Building markdown file {}", path.display());
     let (metadata, body_html) = parse_file(path)?;
-    let html = apply_template(tera, body_html, metadata, all_posts, config)?;
+    let html =
+        apply_template(tera, body_html, metadata, all_posts, config, path)?;
     trace!("Calling apply template");
     let is_root_index = path.file_name().map_or(false, |n| n == "index.md")
         && path.parent().map_or(false, |p| p.ends_with(MARKDOWN_PATH));
@@ -167,16 +171,31 @@ fn apply_template(
     metadata: Metadata,
     all_posts: &[PostContext],
     site_config: &SiteConfig,
+    path: &Path,
 ) -> Result<String, BuildError> {
     let mut context = tera::Context::new();
     context.insert("meta", &metadata);
     context.insert("content", &body_html);
     context.insert("posts", &all_posts);
-    context.insert("config", &site_config);
-    let template = metadata.template.as_deref().unwrap_or("post.html");
-    let mut html = tera
-        .render(template, &context)
-        .map_err(|e| BuildError::from(e))?;
+    context.insert("site", &site_config);
+    let template = if let Some(template) = metadata.template.as_deref() {
+        template
+    } else if path.file_name().map_or(false, |n| n == "index.md")
+        && path.parent().map_or(false, |p| p.ends_with("content"))
+    {
+        "index.html"
+    } else {
+        "post.html"
+    };
+    let mut html = tera.render(template, &context).map_err(|e| {
+        error!("Tera render error: {e}");
+        let mut cause = e.source();
+        while let Some(e) = cause {
+            error!("Caused by: {e}");
+            cause = e.source();
+        }
+        BuildError::from(e)
+    })?;
     if WATCH_ENABLED.load(Ordering::Relaxed) {
         html.push_str(LIVE_RELOAD_SCRIPT);
     }

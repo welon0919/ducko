@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <h1>{{ meta.title }}</h1>
+    <div class="content">{{ content | safe }}</div>
+</section>
+
+<section class="post-list">
+    <h2>Newest articles</h2>
+    <ul>
+        {% for post in posts %}
+        {# Ignore homepage itself #}
+        {% if post.url != "/" %}
+        <li>
+            <span class="date">{{ post.meta.date }}</span>
+            <a href="{{ post.url }}">{{ post.meta.title }}</a>
+        </li>
+        {% endif %}
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

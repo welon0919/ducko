@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use static_site_generator::{build, serve};
+use static_site_generator::{build, new, serve};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -13,6 +13,7 @@ enum Commands {
         #[arg(long, short)]
         watch: bool,
     },
+    New,
 }
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
@@ -25,6 +26,9 @@ pub async fn main() -> anyhow::Result<()> {
         }
         Commands::Serve { watch } => {
             serve(watch).await?;
+        }
+        Commands::New => {
+            new()?;
         }
     }
     Ok(())

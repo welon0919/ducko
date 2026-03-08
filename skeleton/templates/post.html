@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ meta.title }} | {{ site.title }}{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h1>{{ meta.title }}</h1>
+        <p class="meta">Published at: {{ meta.date }}</p>
+    </header>
+    <div class="markdown-body">
+        {{ content | safe }}
+    </div>
+</article>
+{% endblock %}

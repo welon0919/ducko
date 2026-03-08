@@ -1,3 +1,4 @@
+mod builder;
 mod error;
 
 use std::collections::HashMap;
@@ -8,7 +9,7 @@ use crate::config::error::ConfigError;
 
 pub const CONFIG_PATH: &str = "config.yaml";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SiteConfig {
     pub title: String,
     pub description: String,
@@ -20,12 +21,17 @@ pub struct SiteConfig {
     #[serde(default)]
     pub extra: HashMap<String, String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl SiteConfig {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Author {
     pub name: String,
     pub email: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MenuItem {
     pub name: String,
     pub url: String,

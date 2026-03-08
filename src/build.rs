@@ -175,10 +175,15 @@ fn build_markdown_file(
     let html =
         apply_template(tera, &body_html, &metadata, all_posts, config, path)?;
     trace!("Calling apply template");
-    let is_root_index = path.file_name().is_some_and(|n| n == "index.md")
+    let should_be_put_at_root = path
+        .file_name()
+        .is_some_and(|n| n == "index.md" || n == "404.md")
         && path.parent().is_some_and(|p| p.ends_with(MARKDOWN_PATH));
-    let file_output_path = if is_root_index {
-        PathBuf::from(OUTPUT_PATH).join("index.html")
+    let file_output_path = if should_be_put_at_root {
+        PathBuf::from(OUTPUT_PATH).join(format!(
+            "{}.html",
+            path.file_stem().unwrap().to_str().unwrap()
+        ))
     } else {
         get_output_file_folder(path).join("index.html")
     };
@@ -461,6 +466,9 @@ fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
     );
 
     for post in posts {
+        if post.url.contains("404") {
+            continue;
+        }
         let _ = write!(
             xml,
             "<url><loc>{}{}</loc><lastmod>{}</lastmod></url>",

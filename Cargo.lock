@@ -233,7 +233,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -415,6 +417,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "ducko"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "cargo-embed",
+ "chrono",
+ "clap",
+ "env_logger",
+ "fs_extra",
+ "log",
+ "notify",
+ "pulldown-cmark",
+ "rust-embed",
+ "rustyline",
+ "serde",
+ "serde_yaml",
+ "tera",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower-http",
+ "webbrowser",
 ]
 
 [[package]]
@@ -1000,9 +1027,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.182"
+version = "0.2.183"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+checksum = "b5b646652bf6661599e1da8901b3b9522896f01e736bad5f723fe7a3a27f899d"
 
 [[package]]
 name = "libm"
@@ -1746,12 +1773,12 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "socket2"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
+checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1759,30 +1786,6 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
-
-[[package]]
-name = "static_site_generator"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "cargo-embed",
- "clap",
- "env_logger",
- "fs_extra",
- "log",
- "notify",
- "pulldown-cmark",
- "rust-embed",
- "rustyline",
- "serde",
- "serde_yaml",
- "tera",
- "thiserror 2.0.18",
- "tokio",
- "tower-http",
- "webbrowser",
-]
 
 [[package]]
 name = "strsim"

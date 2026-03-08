@@ -1,5 +1,5 @@
 [package]
-name = "static_site_generator"
+name = "ducko"
 version = "0.1.0"
 edition = "2024"
 
@@ -22,3 +22,4 @@ notify = "8.2.0"
 cargo-embed = "1.0.1"
 rustyline = { version = "17.0.2", features = ["derive"] }
 rust-embed = "8.11.0"
+chrono = "0.4.44"

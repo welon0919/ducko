@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use static_site_generator::{build, new, serve};
+use ducko::{add_page, build, new, serve};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -8,12 +8,23 @@ struct Args {
 }
 #[derive(Subcommand, Debug)]
 enum Commands {
-    Build,
+    /// Create a new ducko site
+    New,
+    /// Add a new page to your site
+    Add {
+        /// True if you want to create a page bundle
+        name: Option<String>,
+        #[arg(long)]
+        index: bool,
+    },
+    /// Serve a Dev server
     Serve {
-        #[arg(long, short)]
+        /// Whether you want live update or not
+        #[arg(long, short, default_value_t = true)]
         watch: bool,
     },
-    New,
+    /// Build the site into HTML
+    Build,
 }
 #[tokio::main]
 pub async fn main() -> anyhow::Result<()> {
@@ -29,6 +40,9 @@ pub async fn main() -> anyhow::Result<()> {
         }
         Commands::New => {
             new()?;
+        }
+        Commands::Add { name, index } => {
+            add_page(name, index)?;
         }
     }
     Ok(())

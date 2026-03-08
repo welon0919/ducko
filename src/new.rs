@@ -1,12 +1,7 @@
 mod asset;
 mod error;
 
-use std::{
-    borrow::Cow,
-    fs,
-    io::ErrorKind,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
 use anyhow::Context;
 use log::{debug, trace};
@@ -19,34 +14,20 @@ const QUESTIONS: [&str; 5] = [
     "Author email (Optional): ",
 ];
 const DEFAULT_CONFIG: &str = include_str!("../skeleton/config.yaml");
-use rustyline::{
-    Completer, DefaultEditor, Editor, Helper, Hinter, Validator,
-    error::ReadlineError, highlight::Highlighter, history::DefaultHistory,
-};
+use rustyline::{DefaultEditor, error::ReadlineError};
 
 use crate::{
     config::{CONFIG_PATH, SiteConfig},
     new::{asset::Asset, error::InitError},
 };
 
-#[derive(Completer, Hinter, Validator)]
-struct QuestionsHelper;
-
-impl Helper for QuestionsHelper {}
-
-impl Highlighter for QuestionsHelper {
-    fn highlight<'l>(&self, line: &'l str, _pos: usize) -> Cow<'l, str> {
-        if line.is_empty() {
-            Cow::Owned(
-                "\x1b[90mLeave empty to fill in later...\x1b[0m".to_string(),
-            )
-        } else {
-            Cow::Borrowed(line)
-        }
-    }
-}
+/// Helper function for prompting  for new site options
+/// # Errors
+/// Will return `Err` if:
+/// 1. `rustyline` failed to init or readline
+/// 2. The operation si canceled via Ctrl-C or Ctrl-D
 fn ask_questions() -> Result<SiteConfig, InitError> {
-    let mut rl = Editor::<QuestionsHelper, DefaultHistory>::new()?;
+    let mut rl = DefaultEditor::new()?;
     let mut config: SiteConfig = serde_yaml::from_str(DEFAULT_CONFIG).unwrap();
     debug!("Default config: {config:?}");
     for (i, question) in QUESTIONS.iter().enumerate() {
@@ -86,7 +67,7 @@ fn ask_questions() -> Result<SiteConfig, InitError> {
                 return Err(InitError::InitCancelled);
             }
             Err(err) => {
-                eprintln!("Readline error: {}", err);
+                eprintln!("Readline error: {err}",);
                 return Err(err.into());
             }
         }
@@ -94,11 +75,22 @@ fn ask_questions() -> Result<SiteConfig, InitError> {
 
     Ok(config)
 }
+/// Create a new static site
+/// # Errors
+/// Will return `Err` if;
+/// 1. The target directory already exist
+/// 2. The config failed to serialize
+/// 3. It lacks the permission to write to the output folder
+/// # Panics
+/// Will panic if it fialed to load the default assets
 pub fn new() -> anyhow::Result<()> {
     let config = ask_questions()?;
     let target_dir = Path::new(&config.title);
     if target_dir.exists() {
-        anyhow::bail!("Target directory already exists: {:?}", target_dir);
+        anyhow::bail!(
+            "Target directory already exists: {}",
+            target_dir.display()
+        );
     }
     fs::create_dir(&config.title).context("Failed to create directory")?;
     let config_yaml =
@@ -114,9 +106,9 @@ pub fn new() -> anyhow::Result<()> {
             fs::create_dir_all(parent)?;
         }
         fs::write(&target_path, content.data.as_ref()).with_context(|| {
-            format!("Failed to create file: {:?}", target_path)
+            format!("Failed to create file: {}", target_path.display())
         })?;
-        trace!("Created file: {}", file_path);
+        trace!("Created file: {file_path}",);
     }
     println!("\n✅ Project '{}' initialized successfully!", config.title);
     println!("Next steps:");

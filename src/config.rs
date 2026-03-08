@@ -1,5 +1,4 @@
-mod builder;
-mod error;
+pub(crate) mod error;
 
 use std::collections::HashMap;
 
@@ -10,6 +9,7 @@ use crate::config::error::ConfigError;
 pub const CONFIG_PATH: &str = "config.yaml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// The global config for the site
 pub struct SiteConfig {
     pub title: String,
     pub description: String,
@@ -21,22 +21,26 @@ pub struct SiteConfig {
     #[serde(default)]
     pub extra: HashMap<String, String>,
 }
-impl SiteConfig {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-}
+
+/// The author data
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Author {
     pub name: String,
     pub email: Option<String>,
 }
+/// An item in the menu
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MenuItem {
     pub name: String,
     pub url: String,
 }
 impl SiteConfig {
+    /// Loads the default config from `config.yaml`
+    /// # Errors
+    /// Will return `Err` if:
+    /// 1. The config file is not found
+    /// 2. It lacks the permission to read the config file
+    /// 3. The config file cannot be parsed
     pub fn load_config() -> Result<Self, ConfigError> {
         let content = std::fs::read_to_string(CONFIG_PATH).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {

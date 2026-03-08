@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+use crate::config::error::ConfigError;
+
 #[derive(Error, Debug)]
 pub enum BuildError {
     #[error("Folder content not found")]
@@ -20,4 +22,6 @@ pub enum BuildError {
     CopyError(#[from] fs_extra::error::Error),
     #[error("{0}")]
     GeneralError(String),
+    #[error(transparent)]
+    FailedToLoadConfig(#[from] ConfigError),
 }

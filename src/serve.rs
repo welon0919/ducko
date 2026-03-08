@@ -24,6 +24,11 @@ use crate::{
 
 pub static WATCH_ENABLED: AtomicBool = AtomicBool::new(false);
 
+/// Opens the dev server
+/// # Errors
+/// Will return `Err` if:
+/// 1. It failed to bind the `TcpListener`
+/// 2. `Axum` failed to serve
 pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
     WATCH_ENABLED.store(watch_for_update, std::sync::atomic::Ordering::Relaxed);
     build().context("Initial build failed")?;
@@ -31,8 +36,8 @@ pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
     if watch_for_update {
         let sender_tx = reload_tx.clone();
         std::thread::spawn(move || {
-            if let Err(e) = watch(sender_tx) {
-                error!("Watch thread died: {}", e);
+            if let Err(e) = watch(&sender_tx) {
+                error!("Watch thread died: {e}",);
             }
         });
     }
@@ -48,20 +53,22 @@ pub async fn serve(watch_for_update: bool) -> anyhow::Result<()> {
         .fallback_service(serve_dir);
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
     info!("listening on http://{addr}",);
-    webbrowser::open(format!("http://{}", addr).as_str())?;
+    webbrowser::open(format!("http://{addr}",).as_str())?;
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .context("Failed to bind listener")?;
     axum::serve(listener, app).await?;
     Ok(())
 }
+/// Handler for live reload
+#[allow(clippy::unused_async)]
 async fn livereload_handler(
     ws: WebSocketUpgrade,
     reload_tx: broadcast::Sender<()>,
 ) -> impl axum::response::IntoResponse {
     let mut reload_rx = reload_tx.subscribe();
     ws.on_upgrade(move |mut socket| async move {
-        while let Ok(_) = reload_rx.recv().await {
+        while reload_rx.recv().await.is_ok() {
             info!("reload");
             if socket.send(Message::Text("RELOAD".into())).await.is_err() {
                 break;
@@ -70,7 +77,11 @@ async fn livereload_handler(
     })
 }
 
-fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
+/// Watch the file for changes
+/// Will return error if:
+/// 1. the `watcher` failed to watch files (Probably due to permission errors)
+/// 2. Some bad things happen during rebuild
+fn watch(reload_tx: &broadcast::Sender<()>) -> anyhow::Result<()> {
     let (tx, rx) = channel();
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     let output_abs = std::fs::canonicalize(OUTPUT_PATH)
@@ -102,7 +113,7 @@ fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
                     let mut needs_reload = false;
                     for path in event.paths {
                         let path_str = path.to_string_lossy();
-                        if path_str.ends_with("~") || path_str.contains(".tmp")
+                        if path_str.ends_with('~') || path_str.contains(".tmp")
                         {
                             trace!(
                                 "Skipping temporary file: {}",
@@ -115,7 +126,7 @@ fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
                         {
                             continue;
                         }
-                        info!("File changed, handling {:?}", path);
+                        info!("File changed, handling {}", path.display());
 
                         if let Err(e) = handle_file_change(&path) {
                             error!("Handle file change error: {e}");
@@ -134,7 +145,7 @@ fn watch(reload_tx: broadcast::Sender<()>) -> anyhow::Result<()> {
             Ok(Err(e)) => {
                 error!("watch error: {e}");
             }
-            Err(e) => error!("watch error: {:?}", e),
+            Err(e) => error!("watch error: {e}",),
         }
     }
 }

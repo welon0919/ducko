@@ -7,8 +7,6 @@ pub enum InitError {
     ReadlineError(#[from] ReadlineError),
     #[error("Init cancelled")]
     InitCancelled,
-    #[error("Directory {0} already exist")]
-    DirectoryAlreadyExist(String),
     #[error("IO Error")]
     IOError(#[from] std::io::Error),
 }

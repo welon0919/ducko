@@ -3,6 +3,7 @@ mod error;
 
 use std::{
     error::Error,
+    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
     sync::{LazyLock, atomic::Ordering},
@@ -23,7 +24,7 @@ use crate::{
 pub const MARKDOWN_PATH: &str = "content";
 pub const STATIC_PATH: &str = "static";
 pub const OUTPUT_PATH: &str = "public";
-const LIVE_RELOAD_SCRIPT: &str = r#"
+const LIVE_RELOAD_SCRIPT: &str = r"
             <script>
                 const socket = new WebSocket('ws://' + window.location.host + '/livereload');
                 socket.onmessage = (event) => {
@@ -33,7 +34,7 @@ const LIVE_RELOAD_SCRIPT: &str = r#"
                 };
                 socket.onclose = () => console.log('LiveReload connection closed.');
             </script>
-        "#;
+        ";
 static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -43,6 +44,10 @@ static OPTIONS: LazyLock<Options> = LazyLock::new(|| {
     options
 });
 
+/// The entry point of the build process which builds from the foot
+/// It also generates a sitemap
+/// # Errors
+/// Will return `Err` if the sub build functions failed, or config loading failed
 pub fn build() -> Result<(), BuildError> {
     let path = PathBuf::from(MARKDOWN_PATH);
     if Path::new(OUTPUT_PATH).exists() {
@@ -52,8 +57,8 @@ pub fn build() -> Result<(), BuildError> {
     trace!("Collecting all posts");
     let all_posts = collect_posts(&path)?;
     info!("Found {} posts", all_posts.len());
-    let tera = load_templates()?;
-    let site_config = SiteConfig::load_config().unwrap();
+    let tera = load_templates();
+    let site_config = SiteConfig::load_config()?;
     // build the content folder
     build_folder(&path, &all_posts, &tera, &site_config)?;
     let sitemap = generate_sitemap(&all_posts, &site_config);
@@ -63,10 +68,13 @@ pub fn build() -> Result<(), BuildError> {
     build_static_folder()?;
     Ok(())
 }
-fn load_templates() -> Result<Tera, BuildError> {
-    let tera = Tera::new("templates/**/*.html")?;
-    Ok(tera)
+/// Load the templates from the `templates` directory
+fn load_templates() -> Tera {
+    Tera::new("templates/**/*.html").unwrap()
 }
+/// Build the static folder
+/// # Errors
+/// Will return `Err` if it lacks permission to write to `OUTPUT_PATH`
 fn build_static_folder() -> Result<(), BuildError> {
     let mut options = CopyOptions::new();
     options.copy_inside = true;
@@ -80,6 +88,9 @@ fn build_static_folder() -> Result<(), BuildError> {
     }
     Ok(())
 }
+/// Build the folder and keep recursions
+/// # Errors
+/// Will return `Err` if it lacks permission or any sub build commands return `Err`
 fn build_folder(
     path: &Path,
     all_posts: &[PostContext],
@@ -93,7 +104,6 @@ fn build_folder(
             e.into()
         }
     })?;
-    let hash_index_md = path.join("index.md").exists();
     for item in items {
         let path = item?.path();
         if path.is_file() {
@@ -135,16 +145,25 @@ fn build_folder(
     }
     Ok(())
 }
+/// Copy the image file to the target directory
+/// # Errors
+/// Will return `Err` if it lacks permission to write to the output directory
 fn build_image(path: &Path) -> Result<(), BuildError> {
     trace!("Building image {}", path.display());
     let output_path = get_output_file_folder(path)
         .parent()
         .unwrap()
         .join(path.file_name().unwrap());
-    fs::create_dir_all(&output_path.parent().unwrap())?;
+    fs::create_dir_all(output_path.parent().unwrap())?;
     fs::copy(path, &output_path)?;
     Ok(())
 }
+/// Build the Markdown file provided by `path`
+/// # Errors
+/// Will return `Err` if:
+/// 1. Error happened when parsing Markdown file
+/// 2. Error happened when applying template
+/// 3. Lacks permission to write to output directory
 fn build_markdown_file(
     path: &Path,
     all_posts: &[PostContext],
@@ -154,10 +173,10 @@ fn build_markdown_file(
     trace!("Building markdown file {}", path.display());
     let (metadata, body_html) = parse_file(path)?;
     let html =
-        apply_template(tera, body_html, metadata, all_posts, config, path)?;
+        apply_template(tera, &body_html, &metadata, all_posts, config, path)?;
     trace!("Calling apply template");
-    let is_root_index = path.file_name().map_or(false, |n| n == "index.md")
-        && path.parent().map_or(false, |p| p.ends_with(MARKDOWN_PATH));
+    let is_root_index = path.file_name().is_some_and(|n| n == "index.md")
+        && path.parent().is_some_and(|p| p.ends_with(MARKDOWN_PATH));
     let file_output_path = if is_root_index {
         PathBuf::from(OUTPUT_PATH).join("index.html")
     } else {
@@ -170,8 +189,8 @@ fn build_markdown_file(
 }
 fn apply_template(
     tera: &Tera,
-    body_html: String,
-    metadata: Metadata,
+    body_html: &str,
+    metadata: &Metadata,
     all_posts: &[PostContext],
     site_config: &SiteConfig,
     path: &Path,
@@ -183,8 +202,8 @@ fn apply_template(
     context.insert("site", &site_config);
     let template = if let Some(template) = metadata.template.as_deref() {
         template
-    } else if path.file_name().map_or(false, |n| n == "index.md")
-        && path.parent().map_or(false, |p| p.ends_with("content"))
+    } else if path.file_name().is_some_and(|n| n == "index.md")
+        && path.parent().is_some_and(|p| p.ends_with("content"))
     {
         "index.html"
     } else {
@@ -204,9 +223,13 @@ fn apply_template(
     }
     Ok(html)
 }
+/// Parse the Markdown file into raw HTML String and `Metadata`
+/// It doesn't apply template!
+/// # Errors
+/// Will return `Err` if the file is missing front matter or has incompatible fields
 fn parse_file(path: &Path) -> Result<(Metadata, String), BuildError> {
-    trace!("Parsing file {}", path.display());
     use BuildError as Error;
+    trace!("Parsing file {}", path.display());
     let raw_content = fs::read_to_string(path)?;
     if !raw_content.starts_with("---\n") {
         return Err(Error::FrontMatterNotFound);
@@ -223,8 +246,9 @@ fn parse_file(path: &Path) -> Result<(Metadata, String), BuildError> {
 
     Ok((metadata, html_output))
 }
+/// Parse the Markdown into HTML
 fn parse_html(markdown_str: &str, base_url: &str) -> String {
-    let parser = Parser::new_ext(markdown_str, OPTIONS.clone());
+    let parser = Parser::new_ext(markdown_str, *OPTIONS);
     let transformed_events = parser.map(|event| match event {
         Event::Start(Tag::Image {
             link_type,
@@ -232,8 +256,8 @@ fn parse_html(markdown_str: &str, base_url: &str) -> String {
             title,
             id,
         }) => {
-            if dest_url.starts_with("/") {
-                let new_dest = format!("{}{}", base_url, dest_url);
+            if dest_url.starts_with('/') {
+                let new_dest = format!("{base_url}{dest_url}",);
                 Event::Start(Tag::Image {
                     link_type,
                     dest_url: CowStr::from(new_dest),
@@ -255,10 +279,11 @@ fn parse_html(markdown_str: &str, base_url: &str) -> String {
     html::push_html(&mut html_output, transformed_events);
     html_output
 }
+/// Get the correct output file folder for the provided `path`
 fn get_output_file_folder(path: &Path) -> PathBuf {
     let rel_path = path
         .strip_prefix(MARKDOWN_PATH)
-        .expect(format!("Path must be under {MARKDOWN_PATH}").as_str());
+        .unwrap_or_else(|_| panic!("Path must be under {MARKDOWN_PATH}"));
 
     let mut output = PathBuf::from(OUTPUT_PATH);
 
@@ -277,6 +302,11 @@ fn get_output_file_folder(path: &Path) -> PathBuf {
     }
     output
 }
+/// Build the directory if it's a page bundle
+/// # Errors
+/// Will return `Err` if:
+/// 1. It lacks the permission to write the output folder
+/// 2. The sub build function returned `Err`
 fn build_page_bundle(
     bundle_src_path: &Path,
     all_posts: &[PostContext],
@@ -299,39 +329,35 @@ fn build_page_bundle(
                     trace!("Processing bundle content: {}", path.display());
                     build_markdown_file(&path, all_posts, tera, site_config)?;
                 }
-                Some(ext)
-                    if matches!(
-                        ext,
-                        "png"
-                            | "jpg"
-                            | "jpeg"
-                            | "gif"
-                            | "bmp"
-                            | "webp"
-                            | "svg"
-                            | "tiff"
-                    ) =>
-                {
+                Some(
+                    "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" | "svg"
+                    | "tiff",
+                ) => {
                     let image_dest = dest_dir.join(file_name);
                     fs::copy(&path, image_dest)?;
-                    trace!("Copied bundle image: {:?}", file_name);
+                    trace!("Copied bundle image: {}", file_name.display());
                 }
-                _ => trace!("Skipping unknown bundle file: {:?}", file_name),
+                _ => trace!(
+                    "Skipping unknown bundle file: {}",
+                    file_name.display()
+                ),
             }
         }
     }
     Ok(())
 }
+/// Handle file change for `serve --watch`
+/// Will return `Err` if the sub build functions failed
 pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
     let all_posts = collect_posts(MARKDOWN_PATH)?;
-    let tera = load_templates()?;
+    let tera = load_templates();
     let site_config = SiteConfig::load_config().unwrap();
     let current_dir = std::env::current_dir()?;
     let rel_path = absolute_path
         .strip_prefix(&current_dir)
         .unwrap_or(absolute_path);
     let path_str = rel_path.to_string_lossy();
-    trace!("Handling file: {}", path_str);
+    trace!("Handling file: {path_str}",);
     if path_str.contains(CONFIG_PATH) {
         info!("Config file changed, performing full rebuild");
         build()?;
@@ -342,18 +368,21 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
         if let Some(ext) = rel_path.extension().and_then(|s| s.to_str()) {
             if ext == "md" {
                 if let Some(parent) = rel_path.parent() {
-                    if parent != Path::new(MARKDOWN_PATH) {
-                        info!("Page bundle changed: {:?}", parent);
-                        build_page_bundle(
-                            parent,
+                    if parent == Path::new(MARKDOWN_PATH) {
+                        info!(
+                            "Single markdown changed: {}",
+                            rel_path.display()
+                        );
+                        build_markdown_file(
+                            rel_path,
                             &all_posts,
                             &tera,
                             &site_config,
                         )?;
                     } else {
-                        info!("Single markdown changed: {:?}", rel_path);
-                        build_markdown_file(
-                            rel_path,
+                        info!("Page bundle changed: {}", parent.display());
+                        build_page_bundle(
+                            parent,
                             &all_posts,
                             &tera,
                             &site_config,
@@ -370,10 +399,9 @@ pub fn handle_file_change(absolute_path: &Path) -> Result<(), BuildError> {
                     | "webp"
                     | "svg"
                     | "tiff"
-            ) {
-                if let Some(parent) = rel_path.parent() {
-                    build_page_bundle(parent, &all_posts, &tera, &site_config)?;
-                }
+            ) && let Some(parent) = rel_path.parent()
+            {
+                build_page_bundle(parent, &all_posts, &tera, &site_config)?;
             }
         }
     } else if path_str.starts_with(STATIC_PATH) {
@@ -390,6 +418,9 @@ fn update_single_static_asset(rel_path: &Path) -> Result<(), BuildError> {
     fs::copy(rel_path, dest_path)?;
     Ok(())
 }
+/// Generate the `posts` template variable
+/// # Errors
+/// Will return `Err` if it lacks the permission to read the directory
 fn collect_posts(
     path: impl AsRef<Path>,
 ) -> Result<Vec<PostContext>, BuildError> {
@@ -400,24 +431,24 @@ fn collect_posts(
 
         if path.is_dir() {
             posts.extend(collect_posts(&path)?);
-        } else if let Some(ext) = path.extension() {
-            if ext == "md" {
-                let (meta, content) = parse_file(&path)?;
+        } else if let Some(ext) = path.extension()
+            && ext == "md"
+        {
+            let (meta, _content) = parse_file(&path)?;
 
-                let rel_path = path.strip_prefix(MARKDOWN_PATH).unwrap();
-                let stem = rel_path.file_stem().unwrap().to_string_lossy();
-                let parent = rel_path.parent().unwrap().to_string_lossy();
+            let rel_path = path.strip_prefix(MARKDOWN_PATH).unwrap();
+            let stem = rel_path.file_stem().unwrap().to_string_lossy();
+            let parent = rel_path.parent().unwrap().to_string_lossy();
 
-                let url = if stem == "index" && parent == "" {
-                    "/".to_string()
-                } else if stem == "index" {
-                    format!("/{}/", parent)
-                } else {
-                    format!("/{}/{}/", parent, stem)
-                };
+            let url = if stem == "index" && parent.is_empty() {
+                "/".to_string()
+            } else if stem == "index" {
+                format!("/{parent}/",)
+            } else {
+                format!("/{parent}/{stem}/",)
+            };
 
-                posts.push(PostContext { meta, url });
-            }
+            posts.push(PostContext { meta, url });
         }
     }
     posts.sort_by(|a, b| b.meta.date.cmp(&a.meta.date));
@@ -430,10 +461,11 @@ fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
     );
 
     for post in posts {
-        xml.push_str(&format!(
+        let _ = write!(
+            xml,
             "<url><loc>{}{}</loc><lastmod>{}</lastmod></url>",
             config.base_url, post.url, post.meta.date
-        ));
+        );
     }
 
     xml.push_str("</urlset>");

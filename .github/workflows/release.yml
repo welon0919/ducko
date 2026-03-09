@@ -43,5 +43,6 @@ jobs:
         uses: houseabsolute/actions-rust-release@v0
         with:
           executable-name: ducko
+          changes-file: "" # <--- 加入這一行，告訴它不要找 Changes.md
 
           target: ${{ matrix.platform.target }}

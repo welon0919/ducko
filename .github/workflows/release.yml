@@ -1,4 +1,7 @@
-name: Release Binaries
+name: Release
+
+permissions:
+  contents: write # 必須：允許 Action 建立 Release 並上傳檔案
 
 on:
   push:
@@ -6,70 +9,39 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    name: Build for ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Release - ${{ matrix.platform.target }}
     strategy:
       matrix:
-        include:
+        platform:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact_name: ssg-linux
+            target: x86_64-unknown-linux-gnu
+
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: ssg-windows.exe
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: ssg-macos-arm64
+
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: ssg-macos-intel
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform.os }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install musl-tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 'stable'
-          targets: ${{ matrix.target }}
-
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Install Cross-Compilation Dependencies
-        shell: bash
-        run: |
-          rustup target add ${{ matrix.target }}
-          
-          if [ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]; then
-            sudo apt-get update
-            sudo apt-get install -y musl-tools
-          fi
-      - name: Prepare and Strip Binary
-        shell: bash
-        run: |
-          BIN_NAME="ducko" 
-          SRC_PATH="target/${{ matrix.target }}/release/$BIN_NAME"
-          
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            SRC_PATH="${SRC_PATH}.exe"
-          fi
-
-          if [ "${{ matrix.os }}" != "windows-latest" ]; then
-            strip "$SRC_PATH"
-          fi
-
-          mv "$SRC_PATH" "./${{ matrix.artifact_name }}"
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: houseabsolute/actions-rust-cross@v0
         with:
-          files: ${{ matrix.artifact_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release"
+          strip: true
+
+      - name: Publish artifacts and release
+        uses: houseabsolute/actions-rust-release@v0
+        with:
+          executable-name: ducko
+
+          target: ${{ matrix.platform.target }}

@@ -2,6 +2,12 @@
 name = "ducko"
 version = "0.1.0"
 edition = "2024"
+description = "A simple tool to generate static sites"
+license = "MIT"
+repository = "https://github.com/welon0919/ducko"
+readme = "README.md"
+keywords = ["static-site", "ssg", "blog", "site-generator", "cli"]
+categories = ["command-line-utilities", "web-programming"]
 
 [dependencies]
 clap = { version = "4.5.60", features = ["derive"] }

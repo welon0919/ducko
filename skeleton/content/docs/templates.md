@@ -100,3 +100,6 @@ Markdown generates HTML tags like `<h1>` or `<p>`. To prevent Tera from displayi
 safe filter:
 
 `{{ content | safe }}`
+
+*For more detailed documentations on templates, visit the
+official [Tera documentation](https://keats.github.io/tera/docs/#templates "Tera documentation")*

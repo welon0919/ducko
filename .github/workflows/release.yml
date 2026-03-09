@@ -1,8 +1,7 @@
-# File for building release
-# Usage:
-# git tag v0.1.0
-# git push v0.1.0
-name: Release Binaries
+name: Release
+
+permissions:
+  contents: write
 
 on:
   push:
@@ -10,50 +9,40 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    name: Build for ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+  release:
+    name: Release - ${{ matrix.platform.target }}
     strategy:
       matrix:
-        include:
+        platform:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact_name: ssg-linux
+            target: x86_64-unknown-linux-gnu
+
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: ssg-windows.exe
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: ssg-macos-arm64
+
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: ssg-macos-intel
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform.os }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Rename binary (Optional, for easier identification)
-        shell: bash
-        run: |
-          cd target/${{ matrix.target }}/release
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv your_bin_name.exe ${{ matrix.artifact_name }}
-          else
-            mv your_bin_name ${{ matrix.artifact_name }}
-          fi
-
-      - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: houseabsolute/actions-rust-cross@v0
         with:
-          files: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release"
+          strip: true
+
+      - name: Publish artifacts and release
+        uses: houseabsolute/actions-rust-release@v0
+        with:
+          executable-name: ducko
+          changes-file: ""
+
+          target: ${{ matrix.platform.target }}

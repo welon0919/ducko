@@ -1,6 +1,7 @@
 # Ducko 🦆
 
-Ducko is a simple, efficient, and fast static site generator (SSG) written in Rust. It aims to provide a streamlined workflow for creating markdown-based websites with live preview and easy deployment.
+Ducko is a simple, efficient, and fast static site generator (SSG) written in Rust. It aims to provide a streamlined
+workflow for creating markdown-based websites with live preview and easy deployment.
 
 ## Features
 
@@ -10,13 +11,20 @@ Ducko is a simple, efficient, and fast static site generator (SSG) written in Ru
 - **🎨 Tera Templates**: Flexible HTML templating using the Tera engine.
 - **📝 Markdown Support**: Write your content in Markdown and let Ducko handle the rest.
 - **🛠️ CLI-First**: Intuitive command-line interface for project management.
+- **🔧 Git Integration**: Automatic Git repository initialization when starting new projects.
 
 ## Installation
 
-To install Ducko, ensure you have Rust and Cargo installed, then clone the repository and build from source:
+To install Ducko, simply run:
 
 ```bash
-git clone https://github.com/yourusername/ducko.git
+cargo install ducko
+```
+
+Alternatively, you can build from source:
+
+```bash
+git clone https://github.com/welon0919/ducko.git
 cd ducko
 cargo install --path .
 ```
@@ -31,7 +39,9 @@ Run the following command and follow the interactive prompts to set up your site
 ducko new
 ```
 
-This will create a new directory with a default skeleton project structure.
+This will create a new directory with a default skeleton project structure and automatically initialize a Git
+repository. **We highly recommend using Git** to track your changes and manage your content history. If Git is not
+installed, the tool will provide instructions on how to set it up manually.
 
 ### 2. Add a New Page
 
@@ -55,7 +65,8 @@ Run the dev server with live reloading enabled by default:
 ducko serve
 ```
 
-Your site will be available at `http://localhost:3333`. Any changes you make to content or templates will automatically refresh the browser.
+Your site will be available at `http://localhost:3333`. Any changes you make to content or templates will automatically
+refresh the browser.
 
 ### 4. Build for Production
 

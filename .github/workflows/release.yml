@@ -1,48 +1,124 @@
 name: Release
 
-permissions:
-  contents: write
-
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  release:
-    name: Release - ${{ matrix.platform.target }}
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
+      fail-fast: false
       matrix:
-        platform:
+        include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            archive: tar.gz
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            archive: zip
 
           - os: macos-latest
             target: x86_64-apple-darwin
+            archive: tar.gz
 
           - os: macos-latest
             target: aarch64-apple-darwin
-
-    runs-on: ${{ matrix.platform.os }}
+            archive: tar.gz
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v0
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          target: ${{ matrix.platform.target }}
-          args: "--locked --release"
-          strip: true
+          targets: ${{ matrix.target }}
 
-      - name: Publish artifacts and release
-        uses: houseabsolute/actions-rust-release@v0
+      - name: Install musl tools
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Get binary name
+        id: bin
+        run: |
+          echo "name=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].name')" >> $GITHUB_OUTPUT
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          BIN=${{ steps.bin.outputs.name }}
+          mkdir dist
+          cp target/${{ matrix.target }}/release/$BIN dist/
+
+          ARCHIVE="$BIN-${{ matrix.target }}.${{ matrix.archive }}"
+          tar -czf $ARCHIVE -C dist $BIN
+
+          shasum -a 256 $ARCHIVE > $ARCHIVE.sha256
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $BIN="${{ steps.bin.outputs.name }}"
+          mkdir dist
+          copy target/${{ matrix.target }}/release/$BIN.exe dist\
+
+          $ARCHIVE="$BIN-${{ matrix.target }}.zip"
+          Compress-Archive dist\$BIN.exe $ARCHIVE
+
+          certutil -hashfile $ARCHIVE SHA256 | Select-Object -Skip 1 -First 1 | Out-File "$ARCHIVE.sha256"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          executable-name: ducko
-          changes-file: ""
+          name: build-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+            *.sha256
 
-          target: ${{ matrix.platform.target }}
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Move files
+        run: |
+          mkdir release
+          find artifacts -type f -exec cp {} release/ \;
+
+      - name: Generate checksums file
+        run: |
+          cd release
+          cat *.sha256 > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release/*

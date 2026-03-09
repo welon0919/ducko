@@ -30,7 +30,6 @@ enum Commands {
 pub async fn main() -> anyhow::Result<()> {
     env_logger::init();
     let args = Args::parse();
-    dbg!(&args);
     match args.command {
         Commands::Build => {
             build()?;

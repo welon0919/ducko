@@ -9,7 +9,7 @@ use log::{debug, trace};
 const QUESTIONS: [&str; 5] = [
     "Enter the title of your blog: ",
     "Description: ",
-    "Base url: ",
+    "Base url (Can be filled in later): ",
     "Author name (Optional): ",
     "Author email (Optional): ",
 ];

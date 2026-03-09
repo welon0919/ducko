@@ -1,7 +1,7 @@
 mod asset;
 mod error;
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use anyhow::Context;
 use log::{debug, trace};
@@ -77,13 +77,45 @@ fn ask_questions() -> Result<SiteConfig, InitError> {
 }
 /// Create a new static site
 /// # Errors
-/// Will return `Err` if;
+/// Will return `Err` if `setup_skeleton_files` failed
+///
+/// # Panics
+/// Will panic if it failed to load the default assets
+pub fn new() -> anyhow::Result<()> {
+    let config = setup_skeleton_files()?;
+    let git_installed = is_git_installed();
+    if git_installed {
+        println!("Git detected. Initializing repository...");
+        let _ = Command::new("git")
+            .arg("init")
+            .current_dir(&config.title)
+            .status();
+    }
+    println!("\n✅ Project '{}' initialized successfully!", config.title);
+    println!("Next steps:");
+    println!("  cd {}", config.title);
+    println!("  {} serve --watch", env!("CARGO_PKG_NAME"));
+    if git_installed {
+        println!(
+            "Next steps: Link this to GitHub to start auto-deploying via Actions!"
+        );
+    } else {
+        println!(
+            "⚠️ Warning: Git is not detected, it is recommended to install git at https://git-scm.com"
+        );
+        println!(
+            "After you install git, run: \ngit init\ngit add .\ngit commit -m \"first commit\""
+        );
+    }
+
+    Ok(())
+}
+/// Set up the default skeleton files
+/// # Errors
 /// 1. The target directory already exist
 /// 2. The config failed to serialize
 /// 3. It lacks the permission to write to the output folder
-/// # Panics
-/// Will panic if it fialed to load the default assets
-pub fn new() -> anyhow::Result<()> {
+fn setup_skeleton_files() -> anyhow::Result<SiteConfig> {
     let config = ask_questions()?;
     let target_dir = Path::new(&config.title);
     if target_dir.exists() {
@@ -110,10 +142,14 @@ pub fn new() -> anyhow::Result<()> {
         })?;
         trace!("Created file: {file_path}",);
     }
-    println!("\n✅ Project '{}' initialized successfully!", config.title);
-    println!("Next steps:");
-    println!("  cd {}", config.title);
-    println!("  {} serve --watch", env!("CARGO_PKG_NAME"));
+    Ok(config)
+}
 
-    Ok(())
+/// Check if git is installed
+fn is_git_installed() -> bool {
+    Command::new("git")
+        .arg("--version")
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }

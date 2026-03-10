@@ -64,7 +64,10 @@ pub fn build() -> Result<(), BuildError> {
     build_folder(&path, &all_posts, &tera, &site_config)?;
     let sitemap = generate_sitemap(&all_posts, &site_config);
     let sitemap_path = Path::new(OUTPUT_PATH).join("sitemap.xml");
+    let rss = generate_rss(&all_posts, &site_config);
+    let rss_path = Path::new(OUTPUT_PATH).join("rss.xml");
     fs::write(sitemap_path, sitemap)?;
+    fs::write(rss_path, rss)?;
     // build the  static folder
     build_static_folder()?;
     Ok(())
@@ -463,10 +466,38 @@ fn collect_posts(
     Ok(posts)
 }
 #[must_use]
-fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
-    let mut xml = String::from(
-        r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#,
+fn generate_rss(posts: &[PostContext], config: &SiteConfig) -> String {
+    let mut rss = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<rss version="2.0">
+<channel>
+    <title>{}</title>
+    <link>{}</link>
+    <description>{}</description>
+"#,
+        config.title, config.base_url, config.description
     );
+    for post in posts.iter().take(5) {
+        // take the most recent 5 posts
+        let _ = write!(
+            rss,
+            "<item>
+<title>{}</title>
+<link>{}{}</link>
+<description>{}</description>
+<pubDate>{}</pubDate>
+            ",
+            post.meta.title,
+            config.base_url,
+            post.url,
+            post.meta.description.as_deref().unwrap_or(""),
+            post.meta.date
+        );
+    }
+    rss
+}
+fn generate_sitemap(posts: &[PostContext], config: &SiteConfig) -> String {
+    let mut xml = String::from(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
 
     for post in posts {
         if post.url.contains("404") {
